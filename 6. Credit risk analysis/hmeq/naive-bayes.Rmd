@@ -1,0 +1,125 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r}
+library(dtplyr)
+library(data.table)
+library(readr)
+library(ISLR)
+library(tidyverse)
+library(magrittr)
+library(naivebayes)
+
+```
+
+```{r}
+hmeq <- read.csv('D:\\HK6\\R\\Code\\naive-bayes\\Credit-Scoring-Data-Sets\\6. Credit risk analysis\\hmeq\\hmeq.csv')
+head(hmeq, 5)
+view(hmeq)
+```
+
+```{r}
+# Function for detecting NA observations: 
+na_rate <- function(x) {x %>% is.na() %>% sum() / length(x)}
+sapply(hmeq, na_rate) %>% round(2)
+
+# Function replaces NA by mean: 
+replace_by_mean <- function(x) {
+  x[is.na(x)] <- mean(x, na.rm = TRUE)
+  return(x)
+}
+
+# A function imputes NA observations for categorical variables: 
+
+replace_na_categorical <- function(x) {
+  x %>% 
+    table() %>% 
+    as.data.frame() %>% 
+    arrange(-Freq) ->> new_df
+  
+  n_obs <- sum(new_df$Freq)
+  pop <- new_df$. %>% as.character()
+  set.seed(29)
+  x[is.na(x)] <- sample(pop, sum(is.na(x)), replace = TRUE, prob = new_df$Freq)
+  return(x)
+}
+
+# Use the two functions: 
+df <- hmeq %>% 
+  mutate_if(is.factor, as.character) %>% 
+  mutate(REASON = case_when(REASON == "" ~ NA_character_, TRUE ~ REASON), 
+         JOB = case_when(JOB == "" ~ NA_character_, TRUE ~ JOB)) %>%
+  mutate_if(is_character, as.factor) %>% 
+  mutate_if(is.numeric, replace_by_mean) %>% 
+  mutate_if(is.factor, replace_na_categorical)
+```
+
+```{r}
+df_train <- df %>% 
+  group_by(BAD) %>% 
+  sample_frac(0.7) %>% 
+  ungroup() # Use 70% data set for training model. 
+
+df_test <- dplyr::setdiff(df, df_train) # Use 30% data set for validation. 
+
+
+```
+
+```{r}
+view(df_train)
+```
+
+```{r}
+summary(df_train)
+```
+
+problem
+
+:   p(BAD \| X)
+
+```{r}
+prop_BAD = prop.table(table(df_train$BAD))
+(prop_BAD)
+## 0         1 
+## 0.8005753 0.1994247 
+```
+
+```{r}
+
+p_BAD <- nrow(subset(df_train, BAD == 1))/nrow(df_train)
+p_REASON <- nrow(subset(df_train, REASON == "DebtCon"))/nrow(df_train)
+p_AvgLoan <- nrow(subset(df_train, LOAN >= mean(LOAN)))/nrow(df_train)
+p_BAD_AvgLoan <- nrow(subset(df_train, BAD == 1 & LOAN >= mean(LOAN) ))/nrow(df_train)
+
+
+```
+
+```{r}
+model <- naive_bayes(as.factor(BAD) ~ ., data = df_train)
+(model)
+```
+
+## Evaluate
+
+```{r}
+pre <- predict(model, df_test)
+pre_table <- table(pre, df_test$BAD, dnn=c("Prediction","Actual"))
+pre_table
+```
+
+```{r}
+pre_table <- as.numeric(pre_table)
+accuracy <- sum(diag(pre_table))/sum(pre_table)*100
+(paste("Accuracy of model:", accuracy))
+
+```
+
+```{r}
+acc <- 1 - (222+ 96)/1788
+(paste("Accuracy of model:", acc))
+
+```
